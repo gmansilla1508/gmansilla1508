@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "Awake",
+    "slug": "awake-mobile",
+    "version": "1.0.0",
+    "scheme": "awake",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#1F4BFF"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.awake.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1F4BFF"
+      },
+      "package": "com.awake.mobile"
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
