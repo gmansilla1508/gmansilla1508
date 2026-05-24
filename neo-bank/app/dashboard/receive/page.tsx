@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { mockAccounts, mockUser } from '@/lib/mock-data'
-import { Copy, Check, QrCode } from 'lucide-react'
+import { Copy, Check, QrCode, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type ReceiveMethod = 'bank' | 'p2p' | 'employer'

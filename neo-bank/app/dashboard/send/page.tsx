@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { mockAccounts, mockContacts } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
-import { ArrowLeft, ChevronRight, Building2, User, Bitcoin } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Building2, User, Bitcoin, Loader2 } from 'lucide-react'
 
 type Step = 'method' | 'recipient' | 'amount' | 'confirm' | 'success'
 type SendMethod = 'awake' | 'bank' | 'crypto'
@@ -31,6 +31,9 @@ export default function SendPage() {
   const [selectedCurrency, setSelectedCurrency] = useState(mockAccounts[0])
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
+  const [sending, setSending] = useState(false)
+  const [transferId, setTransferId] = useState<string | null>(null)
+  const [sendError, setSendError] = useState<string | null>(null)
 
   const parsedAmount = parseFloat(amount) || 0
   const isValidAmount = parsedAmount > 0 && parsedAmount <= selectedCurrency.balance
@@ -62,6 +65,7 @@ export default function SendPage() {
           <Row label="Fee" value="Free" color="text-emerald-400" />
           <Row label="Note" value={note || '—'} />
           <Row label="Status" value="Completed" color="text-emerald-400" />
+          <Row label="Transfer ID" value={transferId ?? '—'} />
         </div>
         <button onClick={reset} className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium transition-colors">
           New Transfer
@@ -84,12 +88,51 @@ export default function SendPage() {
           <Row label="Fee" value="Free" color="text-emerald-400" />
           <Row label="Note" value={note || '—'} />
         </div>
+        {sendError && (
+          <p className="text-red-400 text-sm text-center">{sendError}</p>
+        )}
         <div className="flex gap-3">
           <button onClick={() => setStep('amount')} className="flex-1 py-3 rounded-xl bg-white/5 text-white/70 font-medium hover:bg-white/10 transition-colors">
             Back
           </button>
-          <button onClick={() => setStep('success')} className="flex-1 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium transition-colors">
-            Send Money
+          <button
+            disabled={sending}
+            onClick={async () => {
+              setSending(true)
+              setSendError(null)
+              const customer_id = localStorage.getItem('bridge_customer_id') ?? 'cust_demo'
+              try {
+                const res = await fetch('/api/bridge/transfers', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    customer_id,
+                    amount: parsedAmount.toString(),
+                    currency: selectedCurrency.currency,
+                    method,
+                    destination: selectedContact?.name ?? recipientInput,
+                  }),
+                })
+                const data = await res.json()
+                if (res.ok) {
+                  setTransferId(data.transfer_id)
+                  setStep('success')
+                } else {
+                  setSendError(data.error ?? 'Transfer failed')
+                }
+              } catch {
+                setSendError('Could not process transfer')
+              } finally {
+                setSending(false)
+              }
+            }}
+            className="flex-1 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-70 disabled:cursor-not-allowed text-white font-medium transition-colors flex items-center justify-center gap-2"
+          >
+            {sending ? (
+              <><Loader2 size={16} className="animate-spin" /> Processing...</>
+            ) : (
+              'Send Money'
+            )}
           </button>
         </div>
       </div>

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Loader2 } from 'lucide-react'
 import { Check, ChevronRight, ArrowLeft, Shield, Globe, Briefcase, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -42,6 +43,10 @@ export default function OnboardingPage() {
   const [residence, setResidence] = useState('')
   const [taxResidency, setTaxResidency] = useState('')
   const [incomeSource, setIncomeSource] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [kycUrl, setKycUrl] = useState<string | null>(null)
+  const [bridgeError, setBridgeError] = useState<string | null>(null)
+  const [sandboxMode, setSandboxMode] = useState(false)
 
   function next() {
     if (step < 5) setStep((s) => (s + 1) as Step)
@@ -336,11 +341,69 @@ export default function OnboardingPage() {
                 </div>
               ))}
             </div>
+            {kycUrl && (
+              <div className="glass rounded-xl p-4 border border-amber-500/30 text-left">
+                <p className="text-amber-300 text-sm font-medium mb-1">Complete KYC verification</p>
+                <p className="text-white/50 text-xs mb-3">Identity verification is required to unlock all features.</p>
+                <a
+                  href={kycUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-amber-300 border border-amber-400/30 px-3 py-1.5 rounded-lg hover:bg-amber-400/10 transition-colors"
+                >
+                  Verify identity <ChevronRight size={12} />
+                </a>
+              </div>
+            )}
+            {bridgeError && (
+              <p className="text-red-400 text-xs">{bridgeError}</p>
+            )}
+            {sandboxMode && (
+              <div className="inline-flex items-center gap-1.5 text-xs text-white/40 border border-white/10 px-2.5 py-1 rounded-full">
+                🧪 Sandbox mode
+              </div>
+            )}
             <button
-              onClick={() => router.push('/dashboard')}
-              className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold transition-colors flex items-center justify-center gap-2"
+              disabled={submitting}
+              onClick={async () => {
+                setSubmitting(true)
+                setBridgeError(null)
+                try {
+                  const res = await fetch('/api/bridge/customers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ first_name: firstName, last_name: lastName, email, phone }),
+                  })
+                  const data = await res.json()
+                  if (res.ok) {
+                    if (data.customer_id) {
+                      localStorage.setItem('bridge_customer_id', data.customer_id)
+                    }
+                    if (data.kyc_link_url) {
+                      setKycUrl(data.kyc_link_url)
+                    }
+                    if (data.status === 'sandbox') {
+                      setSandboxMode(true)
+                    }
+                  } else {
+                    setBridgeError(data.error ?? 'Account setup failed')
+                  }
+                } catch {
+                  setBridgeError('Could not reach account setup service')
+                } finally {
+                  setSubmitting(false)
+                  router.push('/dashboard')
+                }
+              }}
+              className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-70 disabled:cursor-not-allowed text-white font-semibold transition-colors flex items-center justify-center gap-2"
             >
-              Enter Awake <ChevronRight size={16} />
+              {submitting ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" /> Setting up account...
+                </>
+              ) : (
+                <>Enter Awake <ChevronRight size={16} /></>
+              )}
             </button>
           </div>
         )}
