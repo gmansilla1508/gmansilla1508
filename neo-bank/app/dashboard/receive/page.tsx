@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { mockAccounts, mockUser } from '@/lib/mock-data'
-import { Copy, Check, QrCode, Plus } from 'lucide-react'
+import { Copy, Check, QrCode, Plus, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type ReceiveMethod = 'bank' | 'p2p' | 'employer'
@@ -19,6 +19,11 @@ const PLATFORMS = [
   { name: 'Remote.com', icon: '🏢', currency: 'USD', instructions: 'Link your Awake USD account in Remote payment preferences.' },
   { name: 'Toptal', icon: '⭐', currency: 'USD', instructions: 'Select bank transfer and use your Awake USD routing details.' },
 ]
+
+const CHAIN_MAP: Record<string, { chain: string; currency: string }> = {
+  USDC: { chain: 'base', currency: 'usdc' },
+  BTC: { chain: 'bitcoin', currency: 'btc' },
+}
 
 function CopyField({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false)
@@ -48,6 +53,59 @@ export default function ReceivePage() {
   const [method, setMethod] = useState<ReceiveMethod>('p2p')
   const [selectedAccount, setSelectedAccount] = useState(mockAccounts[0])
   const [selectedPlatform, setSelectedPlatform] = useState(PLATFORMS[0])
+  const [liquidationAddresses, setLiquidationAddresses] = useState<any[]>([])
+  const [loadingAddresses, setLoadingAddresses] = useState(false)
+  const [creatingAddress, setCreatingAddress] = useState(false)
+  const [bridgePowered, setBridgePowered] = useState(false)
+
+  useEffect(() => {
+    const customerId = localStorage.getItem('bridge_customer_id') ?? 'cust_demo'
+    setLoadingAddresses(true)
+    fetch(`/api/bridge/liquidation-addresses?customer_id=${customerId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setLiquidationAddresses(data)
+          const isSandbox = data.some((a: any) => a.id?.startsWith('la_mock'))
+          setBridgePowered(!isSandbox)
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingAddresses(false))
+  }, [])
+
+  function getBridgeAddress(currency: string) {
+    const curr = currency.toLowerCase()
+    return liquidationAddresses.find((a) => a.currency === curr && a.state === 'active')
+  }
+
+  async function handleGetDepositAddress(account: typeof mockAccounts[0]) {
+    const customerId = localStorage.getItem('bridge_customer_id') ?? 'cust_demo'
+    const mapping = CHAIN_MAP[account.currency]
+    if (!mapping) return
+    setCreatingAddress(true)
+    try {
+      const res = await fetch('/api/bridge/liquidation-addresses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_id: customerId,
+          chain: mapping.chain,
+          currency: mapping.currency,
+          destination_payment_rail: 'ach',
+          destination_currency: 'usd',
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setLiquidationAddresses((prev) => [...prev.filter((a) => a.currency !== mapping.currency), data])
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setCreatingAddress(false)
+    }
+  }
 
   return (
     <div className="p-8 max-w-lg mx-auto space-y-8">
@@ -116,9 +174,49 @@ export default function ReceivePage() {
 
           <div className="glass rounded-2xl p-5">
             {selectedAccount.iban && <CopyField label="IBAN" value={selectedAccount.iban} />}
-            {selectedAccount.walletAddress && <CopyField label="Wallet Address" value={selectedAccount.walletAddress} />}
+            {selectedAccount.walletAddress !== undefined && (() => {
+              const bridgeAddr = getBridgeAddress(selectedAccount.currency)
+              if (loadingAddresses) {
+                return (
+                  <div className="flex items-center gap-2 py-3 border-b border-white/5">
+                    <Loader2 size={14} className="animate-spin text-white/30" />
+                    <span className="text-white/30 text-sm font-mono">Loading address…</span>
+                  </div>
+                )
+              }
+              if (bridgeAddr) {
+                return <CopyField label="Wallet Address" value={bridgeAddr.address} />
+              }
+              if (CHAIN_MAP[selectedAccount.currency]) {
+                return (
+                  <div className="py-3 border-b border-white/5">
+                    <p className="text-white/40 text-xs mb-2">Wallet Address</p>
+                    <button
+                      onClick={() => handleGetDepositAddress(selectedAccount)}
+                      disabled={creatingAddress}
+                      className="flex items-center gap-2 text-xs text-violet-400 border border-violet-400/30 px-3 py-1.5 rounded-lg hover:bg-violet-400/10 transition-colors disabled:opacity-50"
+                    >
+                      {creatingAddress ? (
+                        <><Loader2 size={12} className="animate-spin" /> Creating address…</>
+                      ) : (
+                        <><Plus size={12} /> Get deposit address</>
+                      )}
+                    </button>
+                  </div>
+                )
+              }
+              return <CopyField label="Wallet Address" value={selectedAccount.walletAddress!} />
+            })()}
             <CopyField label="Account holder" value={mockUser.name} />
           </div>
+
+          {bridgePowered && liquidationAddresses.length > 0 && (
+            <div className="flex justify-end">
+              <span className="text-xs text-white/20 border border-white/10 px-2.5 py-1 rounded-full">
+                Powered by Bridge
+              </span>
+            </div>
+          )}
         </div>
       )}
 
